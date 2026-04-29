@@ -91,6 +91,40 @@ Phrasing template:
 
 If the user corrects something, update the doc, show them the correction, then proceed. If they add new context, integrate it and re-show the affected sections.
 
+## Inferred misalignment check (assistant-initiated)
+
+If you infer likely drift from the user's last few responses, pause and run an alignment check before continuing.
+
+Common drift signals:
+- Repeated short/deflective responses that reduce decision clarity
+- Repeated cues that the current line of questioning is not useful
+- Contradictions with the user's stated motivation or success metric
+- Answers that do not improve the actual decision quality
+
+When triggered, use this pattern:
+1. Name the possible drift neutrally:
+   - "I may be pulling this in the wrong direction."
+2. Ask for direction:
+   - "Are we off track?"
+   - "Should I reframe around <user goal> instead of <current frame>?"
+3. If the user confirms drift:
+   - Update `shared-understanding.md` immediately
+   - Continue from the corrected frame
+   - Do not continue the old questioning path
+
+### Reframe vs continue (quick decision table)
+
+| Signal in last few turns | Action |
+|---|---|
+| Clear contradiction with stated motivation/success metric | **Reframe now**. Restate goal in 1-2 lines and confirm before next question. |
+| User says questions feel irrelevant / wrong direction | **Reframe now**. Ask what decision they actually want to make. |
+| Repeated short/deflective answers (2+ in a row) with no clarity gain | **Run alignment check**; if confirmed, reframe. |
+| User skips one non-critical question but overall flow is coherent | **Continue** and mark unresolved assumption. |
+| User skips a critical question that blocks verdict quality | **Offer choice**: proceed with explicit default assumption or pause to refine. |
+| Answers are rough but directionally consistent with goal | **Continue**; tighten later at checkpoint. |
+| New information changes motivation mid-flow | **Reframe now** and update phase 2 + shared understanding. |
+| Disagreement is about wording/tone, not decision frame | **Continue** with softer phrasing; do not reset frame. |
+
 ### shared-understanding.md template
 
 ```markdown
@@ -149,7 +183,7 @@ Move on after the answers are coherent. Do not push hard on vague answers in qui
 
 ### Deep mode
 
-Ask **10-20 questions, one at a time, in a Socratic + adversarial style**. Your goal is to expose vagueness and force concreteness. **Refuse to advance to phase 2 until the answers are concrete.** If the user gives a vague answer, name the vagueness and re-ask.
+Ask **10-20 questions, one at a time, in a Socratic + direct style**. Your goal is to expose vagueness and force concreteness. Escalate pressure only when needed. **Refuse to advance to phase 2 until the answers are concrete.** If the user gives a vague answer, name the vagueness and re-ask.
 
 Question patterns to use:
 - **Concretize the user**: "Walk me through one specific person who'd use this. Name, situation, what they're doing right now without your thing." Reject "developers" or "small business owners" as too broad.
@@ -172,7 +206,24 @@ One question at a time. Never batch.
 
 **Handling "I don't know" answers**: When the user says "I don't know" to a question, assess whether the answer is researchable. If it is (e.g., "how much of investigative work uses OSINT vs. primary sources?"), offer: *"I can research that — want me to look it up before we continue?"* If the question requires the user's personal judgment or decision (e.g., "what's your strongest objection to this idea?"), probe differently rather than moving on.
 
+**Pass / Park handling (skip-friendly):**  
+If the user signals they don't want to answer a question right now (e.g., "not sure," "later," "let's park this," "not relevant," brief deflection), treat it as a **pass/park signal**.
+
+- Mark the item as an **unresolved assumption**.
+- Continue the flow without friction.
+- Do not re-ask the same question more than once unless the user reopens it.
+
+If the unanswered item is critical to verdict quality, offer one lightweight choice:
+- "I can proceed with a default assumption and flag risk, or we can pause and refine this now."
+
 **Handling long-form input**: If the user presents the idea as a detailed essay, article, or spec rather than a short description, don't re-ask questions the document already answers. Read the document carefully, extract what's already concrete, and focus grilling on what's still vague, unexamined, or assumed. Acknowledge what the user has already thought through before pushing on gaps.
+
+**Recommended phrasing (firm but not aggressive):**
+- "I want to pressure-test this, not block you. If this question isn't useful right now, we can park it."
+- "I might be using the wrong frame. Want me to reframe this around <goal>?"
+- "I can proceed with an assumption and flag risk, or we can tighten this now. Your call."
+- "I see a possible disconnect between your goal and my question. Should we reset the frame before continuing?"
+- "I don't need a perfect answer here; a rough direction is enough to move forward."
 
 ### Output of phase 1
 
@@ -515,6 +566,8 @@ If `current_phase` is `done`, ask if the user wants to revisit a specific phase 
 
 - **Sycophantic drift**: catching yourself softening a verdict because the user seems invested. Re-anchor on evidence.
 - **Batching questions**: asking 3 questions in one message. Don't. One at a time.
+- **Forcing answers**: treating every unanswered question as a blocker. Use pass/park handling and keep momentum.
+- **Missing drift**: continuing a stale frame after repeated signs of misalignment. Trigger inferred misalignment check early.
 - **Skipping the checkpoint**: advancing a phase without showing the updated shared-understanding and waiting for confirmation. The whole point of the checkpoint is to catch drift early — skipping it defeats the skill.
 - **Treating motivation as fixed**: if the user reveals new motivation context mid-flow (e.g., during fit analysis they mention "honestly I just want to learn this stack"), update phase 2's output and the framing of subsequent phases. Don't keep operating on the original motivation.
 - **Premature research depth**: in deep mode, do the broad scan first, *then* the check-in, *then* go deep on what matters. Don't burn 20 searches on the first plausible competitor.

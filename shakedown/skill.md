@@ -1,9 +1,9 @@
 ---
-name: idea-viability
+name: shakedown
 description: Rigorously evaluates whether an idea is worth pursuing before time is spent on it. Grills the user on the idea, researches existing solutions, analyzes differentiation, examines product-market fit / adoption potential framed by the user's actual motivation, and delivers an honest graded verdict using IDEO's Desirability/Viability/Feasibility lenses plus a Feasibility×Impact 2x2. Use this skill whenever the user mentions wanting to evaluate, vet, gut-check, sanity-check, validate, or pressure-test an idea — including phrases like "is this worth building", "should I pursue", "viability of", "tell me if this is a good idea", "I have an idea for", "thinking about building", "should I start", or anything where they're considering investing time in a project, product, business, OSS tool, content venture, or research direction. Trigger this even when the user sounds excited and just wants validation — especially then. The skill's job is to save them time on bad ideas, not to cheerlead.
 ---
 
-# Idea Viability
+# Shakedown
 
 A multi-phase evaluator that grills the user, researches the landscape, and delivers an honest verdict on whether an idea is worth pursuing.
 
@@ -38,26 +38,66 @@ Two modes:
 
 If the user has already indicated a preference (e.g., "quick check", "smell test", "deep dive", "really pressure-test this"), skip the question and use the indicated mode.
 
-## File layout
+## Capability check (required at start)
 
-All artifacts live in `./idea-eval/<slug>/` relative to the cwd where the skill was invoked. Per-idea folder, self-contained.
+Before creating artifacts, run a quick environment check:
+
+> *"Can this environment create/update files for tracking? If yes, I'll store artifacts on disk. If not, I'll track state inline and still complete the full evaluation."*
+
+Set one active persistence mode:
+
+- `filesystem` (preferred): write artifacts to disk.
+- `inline-memory`: no file writes; maintain artifacts as structured chat blocks.
+- `resume-packet`: stateless fallback; emit a compact copy/paste packet each boundary.
+
+If file write fails once, automatically downgrade to `inline-memory` and continue. Do not block the evaluation.
+
+## Persistence and artifact layout
+
+The skill always maintains the same logical artifacts, regardless of storage mode.
+
+- `state` (phase tracking — source of truth for resume)
+- `shared-understanding`
+- `idea-brief`
+- `research`
+- `differentiation`
+- `fit-analysis`
+- `verdict`
+
+In `filesystem` mode, store them under:
 
 ```
 ./idea-eval/<slug>/
-  state.json                # phase tracking — source of truth for resume
-  shared-understanding.md   # living doc, re-confirmed at each phase boundary
-  idea-brief.md             # raw output from grilling + motivation
-  research.md               # competitive landscape
-  differentiation.md        # why this is/isn't different
-  fit-analysis.md           # PMF / adoption analysis (depends on motivation)
-  verdict.md                # final call + framework outputs
+  state.json
+  shared-understanding.md
+  idea-brief.md
+  research.md
+  differentiation.md
+  fit-analysis.md
+  verdict.md
 ```
 
-### state.json schema
+In `inline-memory` mode, render the same artifacts in chat with explicit headers:
+- `STATE`
+- `SHARED_UNDERSTANDING`
+- `IDEA_BRIEF`
+- `RESEARCH`
+- `DIFFERENTIATION`
+- `FIT_ANALYSIS`
+- `VERDICT`
+
+In `resume-packet` mode, emit a compact packet containing at least:
+- `slug`, `mode`, `current_phase`
+- `completed_phases`
+- top assumptions, top risks
+- latest decision and timestamp
+
+### State record schema
 
 ```json
 {
   "slug": "ai-resume-screener",
+  "persistence_mode": "filesystem",
   "mode": "deep",
   "current_phase": "research",
   "completed_phases": ["grilling", "motivation"],
@@ -69,17 +109,37 @@ All artifacts live in `./idea-eval/<slug>/` relative to the cwd where the skill 
 
 `current_phase` is one of: `grilling`, `motivation`, `research`, `differentiation`, `fit`, `verdict`, `done`.
 
+### Resume packet template (for stateless environments)
+
+```markdown
+RESUME_PACKET
+slug: <slug>
+persistence_mode: resume-packet
+mode: <quick|deep>
+current_phase: <phase>
+completed_phases: [..]
+last_updated_at: <ISO timestamp>
+top_assumptions:
+- ...
+top_risks:
+- ...
+latest_decision: <proceed|pivot|stop|other>
+```
+
 ### Slug generation
 
-When starting a new idea, auto-generate a kebab-case slug from the user's description (e.g., "an AI tool that screens resumes" → `ai-resume-screener`). **Show the proposed slug to the user and ask them to confirm or override before creating the folder.**
+When starting a new idea, auto-generate a kebab-case slug from the user's description (e.g., "an AI tool that screens resumes" → `ai-resume-screener`). Show the proposed slug to the user and ask them to confirm or override.
+
+- In `filesystem` mode, confirm slug before creating the folder.
+- In non-filesystem modes, still use the slug as logical identifier for state and resume packets.
 
 ## The shared-understanding pattern (load-bearing)
 
-`shared-understanding.md` is the living source of truth for "what we both think this idea is." It is built up incrementally and **re-confirmed at every phase boundary**. This is the single most important mechanism preventing drift between you and the user across a long evaluation.
+`shared-understanding` is the living source of truth for "what we both think this idea is." It is built up incrementally and **re-confirmed at every phase boundary**. This is the single most important mechanism preventing drift between you and the user across a long evaluation.
 
 At every phase boundary (between phases, including mid-research check-in), you must:
 
-1. Update `shared-understanding.md` with what was just learned.
+1. Update `shared-understanding` with what was just learned (file or inline block, based on persistence mode).
 2. Show the user the relevant updated section(s).
 3. Ask them to confirm, correct, or add.
 4. Wait for their response before proceeding.
@@ -108,7 +168,7 @@ When triggered, use this pattern:
    - "Are we off track?"
    - "Should I reframe around <user goal> instead of <current frame>?"
 3. If the user confirms drift:
-   - Update `shared-understanding.md` immediately
+   - Update `shared-understanding` immediately
    - Continue from the corrected frame
    - Do not continue the old questioning path
 
@@ -125,7 +185,7 @@ When triggered, use this pattern:
 | New information changes motivation mid-flow | **Reframe now** and update phase 2 + shared understanding. |
 | Disagreement is about wording/tone, not decision frame | **Continue** with softer phrasing; do not reset frame. |
 
-### shared-understanding.md template
+### shared-understanding template
 
 ```markdown
 # Shared Understanding: <slug>
@@ -227,7 +287,7 @@ If the unanswered item is critical to verdict quality, offer one lightweight cho
 
 ### Output of phase 1
 
-Write `idea-brief.md` with a clean, structured capture of everything learned. Do not write `shared-understanding.md` yet — that comes after motivation in phase 2.
+Persist `idea-brief` with a clean, structured capture of everything learned. Do not create/update `shared-understanding` yet — that comes after motivation in phase 2.
 
 ---
 
@@ -250,11 +310,11 @@ Critical: **the motivation determines what counts as success, what counts as a c
 
 ### Output of phase 2
 
-Update `idea-brief.md` with the motivation section. **Now write `shared-understanding.md` v1** with everything from phases 1 and 2, and run the **first checkpoint**:
+Update `idea-brief` with the motivation section. Now create/update `shared-understanding` v1 with everything from phases 1 and 2, and run the first checkpoint:
 
 > *"Here's how I understand the idea and your motivation. Confirm, correct, or add before I start research."*
 
-Wait for confirmation. Then update `state.json` and proceed.
+Wait for confirmation. Then update the state record and proceed.
 
 ---
 
@@ -276,7 +336,7 @@ Search the web for **3-5 queries** covering:
 - Adjacent solutions / substitutes
 - One discussion-platform query (e.g., "<problem> reddit" or "<problem> hacker news")
 
-Synthesize into `research.md`. Skip the mid-research check-in.
+Synthesize into `research`. Skip the mid-research check-in.
 
 ### Deep mode
 
@@ -309,20 +369,20 @@ This two-pass approach ensures the second wave of research is informed by the id
 
 After both passes, **run the mid-research check-in**:
 
-1. Write a draft of `research.md` with the candidates you found.
+1. Draft `research` with the candidates you found.
 2. Show the user the top candidates with one-line summaries each.
 3. Ask: *"I found these <N> candidates that seem closest. Want me to go deeper on any of these specifically, scan further, or proceed to differentiation analysis?"*
 4. Based on the response, do additional searches or proceed.
 
-Set `research_checkin_done: true` in state.json after this checkpoint.
+Set `research_checkin_done: true` in the state record after this checkpoint.
 
 ### Output of phase 3
 
-Finalize `research.md`. Update the "Research findings" section of `shared-understanding.md`. Run the phase boundary checkpoint:
+Finalize `research`. Update the "Research findings" section of `shared-understanding`. Run the phase boundary checkpoint:
 
 > *"Here's what I found and how I'm framing the landscape. Confirm or correct before I move to differentiation."*
 
-### research.md template
+### Research artifact template
 
 ```markdown
 # Research: <slug>
@@ -387,7 +447,7 @@ Grill *and* research why it doesn't exist:
 
 ### Output of phase 4
 
-Write `differentiation.md`. Update `shared-understanding.md`. Run checkpoint.
+Persist `differentiation`. Update `shared-understanding`. Run checkpoint.
 
 ---
 
@@ -406,7 +466,7 @@ Ask 3-5 targeted questions appropriate to the motivation. Pull in additional res
 
 ### Output of phase 5
 
-Write `fit-analysis.md`. Update `shared-understanding.md`. Run checkpoint.
+Persist `fit-analysis`. Update `shared-understanding`. Run checkpoint.
 
 ---
 
@@ -469,11 +529,11 @@ Strip down to: graded verdict + 2-3 sentences of reasoning + 1-2 kill criteria. 
 
 ### Output of phase 6
 
-Write `verdict.md` using the template below. Update `shared-understanding.md` with the verdict. Set `state.json` `current_phase: "done"`.
+Persist `verdict` using the template below. Update `shared-understanding` with the verdict. Set state record `current_phase: "done"`.
 
 Read the verdict back to the user in chat (don't just write the file silently). Then ask if they want to discuss any part of it.
 
-### verdict.md template (deep mode)
+### Verdict artifact template (deep mode)
 
 ```markdown
 # Verdict: <slug>
@@ -520,7 +580,7 @@ I'd flip this verdict if:
 <Concrete next step appropriate to the verdict. For "yes" verdicts: the smallest experiment that would test the riskiest assumption. For "no" verdicts: the lesson to take away or the pivot worth considering.>
 ```
 
-### verdict.md template (quick mode)
+### Verdict artifact template (quick mode)
 
 ```markdown
 # Verdict: <slug> (quick smell test)
@@ -547,9 +607,12 @@ _Mode: quick — Generated: <ISO timestamp>_
 
 When invoked with "resume idea <slug>":
 
-1. Check that `./idea-eval/<slug>/` exists. If not, tell the user and offer to start a new evaluation with that slug.
-2. Read `state.json` to find `current_phase` and `mode`.
-3. Read `shared-understanding.md` and any completed phase files to reload context.
+1. Resolve persistence mode first:
+   - `filesystem`: use artifacts in `./idea-eval/<slug>/`
+   - `inline-memory`: resume from prior visible `STATE` / artifact blocks in chat
+   - `resume-packet`: ask user to paste latest packet if context is missing
+2. Load state (`current_phase`, `mode`, timestamp) from the active persistence source.
+3. Load `shared-understanding` and completed phase artifacts from that same source.
 4. Show the user a brief summary: *"Picking up <slug> in <mode> mode. We're at phase <N>: <phase name>. Last update: <timestamp>. Want me to continue from here, or revisit something earlier?"*
 5. Wait for user direction, then proceed.
 
@@ -557,10 +620,20 @@ If `current_phase` is `done`, ask if the user wants to revisit a specific phase 
 
 ## State management rules
 
-- After every phase boundary, update `state.json` with new `current_phase`, append to `completed_phases`, and update `last_updated_at`.
-- `shared-understanding.md`'s `_Last updated_` line should match `state.json`'s `last_updated_at`.
+- After every phase boundary, update the state record with new `current_phase`, append to `completed_phases`, and update `last_updated_at`.
+- `shared-understanding` `_Last updated_` should match state `last_updated_at`.
 - Never advance `current_phase` without first running the checkpoint and getting user confirmation.
-- If the user goes back to revise something in a prior phase, update both the relevant phase file *and* `shared-understanding.md`. Don't silently leave stale information in either.
+- If the user goes back to revise something in a prior phase, update both the relevant phase artifact and `shared-understanding`. Don't silently leave stale information in either.
+
+### Filesystem-specific rules
+
+- In `filesystem` mode, each artifact maps to its canonical file in `./idea-eval/<slug>/`.
+- If file creation/update fails, downgrade to `inline-memory` immediately, emit a resume packet, and continue.
+
+### Non-filesystem rules
+
+- In `inline-memory` mode, always render updated `STATE` + changed artifact blocks at phase boundaries.
+- In `resume-packet` mode, always emit a fresh packet at phase boundaries and after major corrections.
 
 ## Common failure modes to avoid
 
